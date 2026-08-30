@@ -1,9 +1,9 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": "frontend/node_modules/wrangler/config-schema.json",
   "name": "her-birthday-interactive-website",
   "compatibility_date": "2026-08-28",
   "assets": {
-    "directory": "./dist",
+    "directory": "./frontend/dist",
     "not_found_handling": "single-page-application"
   }
 }
