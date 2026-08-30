@@ -78,6 +78,36 @@ router.get('/info', (req, res) => {
 const localSessions = new Map();
 const localEvents = [];
 
+// Helper: Format timestamp into Pakistan Standard Time (PKT - Asia/Karachi, UTC+05:00)
+const formatPakistanDateTime = (timestamp) => {
+  try {
+    const d = new Date(timestamp || Date.now());
+    const timeFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const dateFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    return {
+      time: timeFormatter.format(d),
+      date: dateFormatter.format(d),
+      timezone: 'PKT (UTC+05:00)',
+    };
+  } catch {
+    return {
+      time: '12:00 PM',
+      date: 'Today',
+      timezone: 'PKT (UTC+05:00)',
+    };
+  }
+};
+
 // Helper: Send Gmail notification for new visitor session
 const sendNewVisitorNotification = async (session) => {
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -86,19 +116,21 @@ const sendNewVisitorNotification = async (session) => {
   const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
   const recipientEmail = process.env.MESSAGE_RECEIVER_EMAIL || smtpUser;
 
-  if (!smtpUser || !smtpPass) {
-    console.log(`[Local Notification Notice] New visitor session started: ${session.sessionId} (${session.deviceType}, section: ${session.lastSection}). (Add SMTP credentials to .env to send real Gmail notification to ${recipientEmail})`);
-    return;
-  }
-
-  const timeStr = new Date(session.startedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const { time, date, timezone } = formatPakistanDateTime(session.startedAt);
   const deviceStr = (session.deviceType || 'Desktop').charAt(0).toUpperCase() + (session.deviceType || 'Desktop').slice(1);
   const countryStr = session.country || 'Local / Unknown';
+
+  if (!smtpUser || !smtpPass) {
+    console.log(`[Local Notification Notice] New visitor session started: ${session.sessionId} at ${time} (${timezone}, ${session.deviceType}, section: ${session.lastSection}). (Add SMTP credentials to .env to send real Gmail notification to ${recipientEmail})`);
+    return;
+  }
 
   const textBody = [
     'A new visitor has started the birthday experience.',
     '',
-    `Time: ${timeStr}`,
+    `Time: ${time}`,
+    `Date: ${date}`,
+    `Timezone: ${timezone}`,
     `Device: ${deviceStr}`,
     `Country: ${countryStr}`,
     `Current section: ${session.lastSection || 'Intro'}`,

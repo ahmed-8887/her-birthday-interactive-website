@@ -12,14 +12,37 @@
 import { connect } from 'cloudflare:sockets';
 
 /**
- * Format timestamp into human-readable 12-hour local time string
+ * Format timestamp into Pakistan Standard Time (PKT - Asia/Karachi, UTC+05:00)
  */
-function formatTime(timestamp) {
+function formatPakistanDateTime(timestamp) {
   try {
     const d = new Date(timestamp || Date.now());
-    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+    const timeFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const dateFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    return {
+      time: timeFormatter.format(d),
+      date: dateFormatter.format(d),
+      timezone: 'PKT (UTC+05:00)',
+    };
   } catch {
-    return 'Just now';
+    return {
+      time: '12:00 PM',
+      date: 'Today',
+      timezone: 'PKT (UTC+05:00)',
+    };
   }
 }
 
@@ -182,7 +205,7 @@ export async function sendNewVisitorEmail(env, session) {
   const smtpHost = env.SMTP_HOST || 'smtp.gmail.com';
   const smtpPort = parseInt(env.SMTP_PORT || '465', 10);
 
-  const timeStr = formatTime(session.startedAt);
+  const { time, date, timezone } = formatPakistanDateTime(session.startedAt);
   const deviceStr = (session.deviceType || 'Desktop').charAt(0).toUpperCase() + (session.deviceType || 'Desktop').slice(1);
   const countryStr = session.country || 'Unknown';
   const sectionStr = session.lastSection || 'Intro';
@@ -197,7 +220,15 @@ export async function sendNewVisitorEmail(env, session) {
       <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #FFFFFF; background-color: #12121A; border-radius: 8px; overflow: hidden;">
         <tr style="border-bottom: 1px solid #1F1F2E;">
           <td style="padding: 10px 14px; color: #9A9AA5; width: 130px;">Time</td>
-          <td style="padding: 10px 14px; font-weight: 500;">${timeStr}</td>
+          <td style="padding: 10px 14px; font-weight: 500;">${time}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #1F1F2E;">
+          <td style="padding: 10px 14px; color: #9A9AA5;">Date</td>
+          <td style="padding: 10px 14px; font-weight: 500;">${date}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #1F1F2E;">
+          <td style="padding: 10px 14px; color: #9A9AA5;">Timezone</td>
+          <td style="padding: 10px 14px; font-weight: 500; color: #FF4F81;">${timezone}</td>
         </tr>
         <tr style="border-bottom: 1px solid #1F1F2E;">
           <td style="padding: 10px 14px; color: #9A9AA5;">Device</td>
@@ -235,7 +266,7 @@ export async function sendNewVisitorEmail(env, session) {
       subject,
       htmlBody,
     });
-    console.log(`[Gmail Notification Sent] Delivered to ${receiverEmail} for session: ${sessionIdStr}`);
+    console.log(`[Gmail Notification Sent] Delivered to ${receiverEmail} for session: ${sessionIdStr} at ${time} (${timezone})`);
   } catch (err) {
     console.error('[Gmail Notification Error]:', err.message || err);
   }
@@ -251,8 +282,9 @@ export async function sendUserMessageEmail(env, { type = 'text', message = '', m
   const smtpHost = env.SMTP_HOST || 'smtp.gmail.com';
   const smtpPort = parseInt(env.SMTP_PORT || '465', 10);
 
-  const submittedAt = new Date().toLocaleString('en-US');
   const timestamp = Date.now();
+  const { time, date } = formatPakistanDateTime(timestamp);
+  const submittedAt = `${date} at ${time} (PKT)`;
 
   let subject = '💌 New Birthday Website Message';
   let htmlBody = '';
