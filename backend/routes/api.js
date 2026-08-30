@@ -74,6 +74,164 @@ router.get('/info', (req, res) => {
   });
 });
 
+// In-memory visitor analytics store for local development
+const localSessions = new Map();
+const localEvents = [];
+
+// Helper: Send Gmail notification for new visitor session
+const sendNewVisitorNotification = async (session) => {
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
+  const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+  const recipientEmail = process.env.MESSAGE_RECEIVER_EMAIL || smtpUser;
+
+  if (!smtpUser || !smtpPass) {
+    console.log(`[Local Notification Notice] New visitor session started: ${session.sessionId} (${session.deviceType}, section: ${session.lastSection}). (Add SMTP credentials to .env to send real Gmail notification to ${recipientEmail})`);
+    return;
+  }
+
+  const timeStr = new Date(session.startedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const deviceStr = (session.deviceType || 'Desktop').charAt(0).toUpperCase() + (session.deviceType || 'Desktop').slice(1);
+  const countryStr = session.country || 'Local / Unknown';
+
+  const textBody = [
+    'A new visitor has started the birthday experience.',
+    '',
+    `Time: ${timeStr}`,
+    `Device: ${deviceStr}`,
+    `Country: ${countryStr}`,
+    `Current section: ${session.lastSection || 'Intro'}`,
+    `Sections viewed: ${session.sectionCount || 1}`,
+    `Session ID: ${session.sessionId}`,
+    '',
+    '---',
+    'Her Birthday Interactive Website ✦',
+  ].join('\n');
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass.replace(/\s+/g, ''),
+      },
+    });
+
+    await transporter.sendMail({
+      from: `"Birthday Website" <${smtpUser}>`,
+      to: recipientEmail,
+      subject: '🎂 New Visitor — Her Birthday Website',
+      text: textBody,
+    });
+    console.log(`[Gmail Notification Sent] New visitor email delivered to ${recipientEmail}`);
+  } catch (err) {
+    console.error('[Gmail Notification Error]:', err.message);
+  }
+};
+
+// POST /api/track Endpoint
+router.post('/track', async (req, res) => {
+  try {
+    const { sessionId, event = 'visit_started', section = 'Intro', deviceType = 'desktop', timestamp = Date.now() } = req.body;
+
+    if (!sessionId || typeof sessionId !== 'string') {
+      return res.status(400).json({ success: false, error: 'Invalid sessionId' });
+    }
+
+    const safeSessionId = String(sessionId).slice(0, 100);
+    const safeEvent = String(event).slice(0, 100);
+    const safeSection = String(section).slice(0, 100);
+    const safeDevice = String(deviceType).slice(0, 50);
+
+    const isExisting = localSessions.has(safeSessionId);
+
+    if (!isExisting) {
+      // 1. New Visitor Session
+      const sessionData = {
+        sessionId: safeSessionId,
+        startedAt: timestamp,
+        lastActivity: timestamp,
+        deviceType: safeDevice,
+        country: 'Local',
+        sectionCount: 1,
+        lastSection: safeSection,
+      };
+
+      localSessions.set(safeSessionId, sessionData);
+      localEvents.push({
+        sessionId: safeSessionId,
+        eventName: safeEvent,
+        sectionName: safeSection,
+        timestamp,
+      });
+
+      // Send ONE Gmail notification asynchronously
+      sendNewVisitorNotification(sessionData).catch(() => {});
+
+      return res.json({ success: true, isNewSession: true });
+    }
+
+    // 2. Existing Session
+    const session = localSessions.get(safeSessionId);
+    session.lastActivity = timestamp;
+
+    const alreadyRecorded = localEvents.some(
+      (e) => e.sessionId === safeSessionId && e.eventName === safeEvent && e.sectionName === safeSection
+    );
+
+    if (!alreadyRecorded) {
+      localEvents.push({
+        sessionId: safeSessionId,
+        eventName: safeEvent,
+        sectionName: safeSection,
+        timestamp,
+      });
+      session.sectionCount += 1;
+      session.lastSection = safeSection;
+    }
+
+    return res.json({ success: true, isNewSession: false });
+  } catch (err) {
+    console.error('[Track Error]:', err);
+    return res.status(200).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/journey/:sessionId Endpoint
+router.get('/journey/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const session = localSessions.get(sessionId);
+  if (!session) {
+    return res.status(404).json({ success: false, error: 'Session not found' });
+  }
+
+  const events = localEvents
+    .filter((e) => e.sessionId === sessionId)
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  const durationSeconds = Math.max(0, Math.round((session.lastActivity - session.startedAt) / 1000));
+
+  res.json({
+    success: true,
+    journey: {
+      ...session,
+      startedAt: new Date(session.startedAt).toISOString(),
+      lastActivity: new Date(session.lastActivity).toISOString(),
+      durationSeconds,
+      events,
+    },
+  });
+});
+
+// GET /api/sessions Endpoint
+router.get('/sessions', (req, res) => {
+  const sessions = Array.from(localSessions.values()).reverse();
+  res.json({ success: true, sessions });
+});
+
 // POST /api/send-message Endpoint (supports text, voice recording, and video recording)
 router.post('/send-message', rateLimiter, async (req, res) => {
   try {

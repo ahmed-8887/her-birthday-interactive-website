@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Heart, Send, Sparkles, AlertCircle, ArrowLeft, Mic, Edit3, Square, RotateCcw, Orbit } from 'lucide-react';
 import { StarField } from '../components/StarField';
 import { textFadeUp } from '../animations/variants';
+import { trackMessageSubmitted } from '../services/tracker';
 
 export const MessageFormSection = () => {
   const navigate = useNavigate();
@@ -160,6 +161,7 @@ export const MessageFormSection = () => {
 
       if (response.ok && data.success) {
         setIsSubmitted(true);
+        trackMessageSubmitted(activeTab);
       } else {
         setServerError(data.error || 'Something went wrong while sending your message. Please try again.');
       }

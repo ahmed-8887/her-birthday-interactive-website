@@ -9,9 +9,11 @@ import { MessagesSection } from './sections/MessagesSection';
 import { BirthdayReveal } from './sections/BirthdayReveal';
 import { UniverseSection } from './sections/UniverseSection';
 import { MessageFormSection } from './sections/MessageFormSection';
+import { useVisitorTracker } from './hooks/useVisitorTracker';
 
 function AnimatedRoutes() {
   const location = useLocation();
+  useVisitorTracker();
 
   return (
     <AnimatePresence mode="wait">
