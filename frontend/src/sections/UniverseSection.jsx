@@ -15,6 +15,14 @@ export const UniverseSection = () => {
   const [selectedStar, setSelectedStar] = useState(null);
   const [isCompleted, setIsCompleted] = useState(false);
   const [showFinalMessage, setShowFinalMessage] = useState(false);
+  const [closedAttempted, setClosedAttempted] = useState(false);
+
+  const handleEndExperience = () => {
+    try {
+      window.close();
+    } catch {}
+    setClosedAttempted(true);
+  };
 
   const {
     openingTitle1,
@@ -259,6 +267,32 @@ export const UniverseSection = () => {
               <span className="font-serif italic text-base text-[#9A9AA5]">
                 {signature}
               </span>
+            </motion.div>
+
+            {/* Close / End Experience Action Button & Graceful Fallback */}
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1, delay: 4.2 }}
+              className="mt-4 flex flex-col items-center gap-3 w-full"
+            >
+              <button
+                type="button"
+                onClick={handleEndExperience}
+                className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-white/10 hover:bg-[#FF4F81] border border-white/20 hover:border-[#FF4F81] text-white font-sans text-xs sm:text-sm font-medium tracking-[0.2em] uppercase transition-all duration-300 shadow-glow-pink cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F81]"
+              >
+                <span>End Experience ✦ Close</span>
+              </button>
+
+              {closedAttempted && (
+                <motion.p
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="font-sans text-xs sm:text-sm text-[#FF4F81] font-light tracking-wide mt-1 text-center"
+                >
+                  The experience has ended. You can close this tab now. ❤️
+                </motion.p>
+              )}
             </motion.div>
           </motion.div>
         </div>
