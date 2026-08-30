@@ -1,10 +1,12 @@
 /**
  * Anonymous Visitor Journey Tracking Service
  * 
- * Provides privacy-first client-side session management and event dispatching.
+ * Provides privacy-first client-side session management, activity heartbeats, and event dispatching.
  * - Anonymous session ID stored in sessionStorage (persists across page reloads in the same tab)
  * - Section view deduplication to prevent React re-renders from dispatching duplicate events
  * - Categorizes device type as 'mobile', 'tablet', or 'desktop'
+ * - Visibility and pagehide listeners to accurately track session activity
+ * - Periodic heartbeat every 30s while visible to prevent active visitors from timing out
  * - Completely silent error handling to guarantee zero UI interruption
  */
 
@@ -78,23 +80,56 @@ export const sendTrackEvent = async (eventName, sectionName) => {
     const payload = {
       sessionId,
       event: eventName,
-      section: sectionName || 'Unknown',
+      section: sectionName || 'Intro',
       deviceType,
       timestamp: Date.now(),
     };
 
-    // Use fetch with keepalive to ensure delivery even during navigation
-    await fetch('/api/track', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    });
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+
+    // Prefer fetch with keepalive; fallback to sendBeacon if fetch unavailable
+    if (typeof fetch === 'function') {
+      await fetch('/api/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      });
+    } else if (navigator.sendBeacon) {
+      navigator.sendBeacon('/api/track', blob);
+    }
   } catch (err) {
     // Fail silently: analytics must NEVER interrupt the birthday website experience
   }
+};
+
+/**
+ * Send lightweight keepalive ping to update last_activity
+ */
+export const sendActivityPing = (reason = 'heartbeat') => {
+  if (typeof window === 'undefined') return;
+  try {
+    const sessionId = getSessionId();
+    const payload = {
+      sessionId,
+      event: 'heartbeat',
+      section: reason,
+      deviceType: getDeviceType(),
+      timestamp: Date.now(),
+    };
+
+    if (typeof fetch === 'function') {
+      fetch('/api/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      }).catch(() => {});
+    } else if (navigator.sendBeacon) {
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      navigator.sendBeacon('/api/track', blob);
+    }
+  } catch {}
 };
 
 /**
@@ -114,7 +149,9 @@ export const trackSectionView = (eventName, sectionName) => {
     // 2. Prevent duplicate section events across React re-renders & re-visits in the same session
     const visitedSet = getVisitedSections();
     if (visitedSet.has(eventName)) {
-      return; // Already recorded for this session
+      // Still update activity ping so the session remains fresh
+      sendActivityPing(sectionName);
+      return;
     }
 
     visitedSet.add(eventName);
@@ -134,10 +171,63 @@ export const trackMessageSubmitted = (messageType = 'text') => {
   sendTrackEvent('message_submitted', 'Message Form');
 };
 
+let heartbeatInterval = null;
+let isListenersInitialized = false;
+
+/**
+ * Start periodic heartbeat (every 30 seconds) while page is visible
+ */
+export const startHeartbeat = () => {
+  if (typeof window === 'undefined') return;
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+
+  heartbeatInterval = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      sendActivityPing('heartbeat_tick');
+    }
+  }, 30000);
+};
+
+export const stopHeartbeat = () => {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+};
+
+/**
+ * Initialize lifecycle listeners (visibilitychange, pagehide)
+ */
+export const initializeActivityTracker = () => {
+  if (typeof window === 'undefined' || isListenersInitialized) return;
+  isListenersInitialized = true;
+
+  startHeartbeat();
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      sendActivityPing('page_hidden');
+      stopHeartbeat();
+    } else if (document.visibilityState === 'visible') {
+      sendActivityPing('page_visible');
+      startHeartbeat();
+    }
+  });
+
+  window.addEventListener('pagehide', () => {
+    sendActivityPing('page_hide');
+    stopHeartbeat();
+  });
+};
+
 export default {
   getSessionId,
   getDeviceType,
   sendTrackEvent,
+  sendActivityPing,
   trackSectionView,
   trackMessageSubmitted,
+  initializeActivityTracker,
+  startHeartbeat,
+  stopHeartbeat,
 };

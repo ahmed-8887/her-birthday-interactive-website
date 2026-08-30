@@ -2,7 +2,7 @@
  * Server-Side Gmail Notification & Message Delivery Service for Cloudflare Workers
  * 
  * Handles:
- * 1. sendNewVisitorEmail: Notification when a new visitor starts the journey
+ * 1. sendVisitorCompletedEmail: Dispatched ONCE when a visitor completes their journey or becomes inactive
  * 2. sendUserMessageEmail: Delivery of text messages, voice recordings, and video notes
  * 
  * Uses Cloudflare Workers Socket API (cloudflare:sockets) with ZERO external dependencies.
@@ -14,7 +14,7 @@ import { connect } from 'cloudflare:sockets';
 /**
  * Format timestamp into Pakistan Standard Time (PKT - Asia/Karachi, UTC+05:00)
  */
-function formatPakistanDateTime(timestamp) {
+export function formatPakistanDateTime(timestamp) {
   try {
     const d = new Date(timestamp || Date.now());
 
@@ -86,7 +86,7 @@ async function writeCommand(writer, command) {
 /**
  * Core SMTP client for sending emails through Gmail SMTP over TLS
  */
-async function executeSmtpSend({ smtpHost, smtpPort, smtpUser, smtpPass, receiverEmail, subject, htmlBody, textBody, attachments = [] }) {
+async function executeSmtpSend({ smtpHost, smtpPort, smtpUser, smtpPass, receiverEmail, subject, htmlBody, attachments = [] }) {
   if (!smtpUser || !smtpPass) {
     console.warn('[SMTP Warning] SMTP_USER or SMTP_PASS not configured.');
     return false;
@@ -196,39 +196,85 @@ async function executeSmtpSend({ smtpHost, smtpPort, smtpUser, smtpPass, receive
 }
 
 /**
- * Send Gmail notification email for a new visitor session
+ * Send Gmail notification email for a COMPLETED visitor session
  */
-export async function sendNewVisitorEmail(env, session) {
+export async function sendVisitorCompletedEmail(env, summary) {
+  if (!summary) return false;
+
   const smtpUser = env.SMTP_USER || env.GMAIL_USER;
   const smtpPass = (env.SMTP_PASS || env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
   const receiverEmail = env.MESSAGE_RECEIVER_EMAIL || smtpUser;
   const smtpHost = env.SMTP_HOST || 'smtp.gmail.com';
   const smtpPort = parseInt(env.SMTP_PORT || '465', 10);
 
-  const { time, date, timezone } = formatPakistanDateTime(session.startedAt);
-  const deviceStr = (session.deviceType || 'Desktop').charAt(0).toUpperCase() + (session.deviceType || 'Desktop').slice(1);
-  const countryStr = session.country || 'Unknown';
-  const sectionStr = session.lastSection || 'Intro';
-  const sessionIdStr = session.sessionId || 'anonymous';
+  const startFormatted = formatPakistanDateTime(summary.startedAt);
+  const endFormatted = formatPakistanDateTime(summary.endedAt);
 
-  const subject = '🎂 New Visitor — Her Birthday Website';
+  const deviceStr = (summary.deviceType || 'Desktop').charAt(0).toUpperCase() + (summary.deviceType || 'Desktop').slice(1);
+  const countryStr = summary.country || 'Unknown';
+  const lastSectionStr = summary.lastSection || 'Intro';
+  const sessionIdStr = summary.sessionId || 'anonymous';
+  const durationStr = summary.durationFormatted || '0 seconds';
+  const messageSubmittedStr = summary.messageSubmitted ? 'Yes 💌' : 'No';
+
+  const uniqueCount = summary.uniqueSectionsCount || 1;
+  const totalSections = summary.totalCanonicalSections || 8;
+
+  // Build canonical checklist HTML
+  const checklistRows = (summary.checklist || []).map((item) => {
+    const isVisited = item.visited;
+    const icon = isVisited ? '✓' : '✗';
+    const iconColor = isVisited ? '#10B981' : '#EF4444';
+    const textColor = isVisited ? '#FFFFFF' : '#6B7280';
+    const bgBadge = isVisited ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.1)';
+
+    return `
+      <tr style="border-bottom: 1px solid #1F1F2E;">
+        <td style="padding: 9px 14px; width: 32px; text-align: center;">
+          <span style="display: inline-block; width: 20px; height: 20px; line-height: 20px; border-radius: 50%; background-color: ${bgBadge}; color: ${iconColor}; font-weight: bold; font-size: 13px;">${icon}</span>
+        </td>
+        <td style="padding: 9px 14px; color: ${textColor}; font-size: 14px; font-weight: ${isVisited ? '500' : '400'};">
+          ${item.name}
+        </td>
+        <td style="padding: 9px 14px; text-align: right; font-size: 12px; color: ${isVisited ? '#10B981' : '#6B7280'};">
+          ${isVisited ? 'Visited' : 'Not Visited'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Build chronological navigation path
+  const chronologicalList = (summary.chronologicalUniqueSections || []).map((sec, idx) => {
+    return `<span style="color: #FF4F81; font-weight: 500;">${idx + 1}. ${sec}</span>`;
+  }).join(' <span style="color: #6B7280;">&rarr;</span> ');
+
+  const subject = '🎂 Visitor Journey Completed — Her Birthday Website';
   const htmlBody = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 24px; border: 1px solid rgba(255, 79, 129, 0.4); border-radius: 16px; background-color: #0B0B0F; color: #FFFFFF;">
-      <h2 style="color: #FF4F81; margin: 0 0 12px 0; font-size: 20px;">🎂 New Visitor Started the Journey</h2>
-      <p style="color: #9A9AA5; font-size: 13px; margin: 0 0 20px 0;">A new visitor has opened the birthday website.</p>
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid rgba(255, 79, 129, 0.4); border-radius: 16px; background-color: #0B0B0F; color: #FFFFFF;">
       
-      <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #FFFFFF; background-color: #12121A; border-radius: 8px; overflow: hidden;">
+      <!-- Header -->
+      <div style="text-align: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #1F1F2E;">
+        <h2 style="color: #FF4F81; margin: 0 0 6px 0; font-size: 22px; letter-spacing: 0.5px;">🎂 Visitor Journey Completed</h2>
+        <p style="color: #9A9AA5; font-size: 13px; margin: 0;">Her Birthday Interactive Website Summary</p>
+      </div>
+      
+      <!-- Session Details Table -->
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #FFFFFF; background-color: #12121A; border-radius: 10px; overflow: hidden; margin-bottom: 20px;">
         <tr style="border-bottom: 1px solid #1F1F2E;">
-          <td style="padding: 10px 14px; color: #9A9AA5; width: 130px;">Time</td>
-          <td style="padding: 10px 14px; font-weight: 500;">${time}</td>
+          <td style="padding: 10px 14px; color: #9A9AA5; width: 140px;">Time Started</td>
+          <td style="padding: 10px 14px; font-weight: 500;">${startFormatted.time} (${startFormatted.date})</td>
         </tr>
         <tr style="border-bottom: 1px solid #1F1F2E;">
-          <td style="padding: 10px 14px; color: #9A9AA5;">Date</td>
-          <td style="padding: 10px 14px; font-weight: 500;">${date}</td>
+          <td style="padding: 10px 14px; color: #9A9AA5;">Time Ended</td>
+          <td style="padding: 10px 14px; font-weight: 500;">${endFormatted.time} (${endFormatted.date})</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #1F1F2E;">
+          <td style="padding: 10px 14px; color: #9A9AA5;">Duration</td>
+          <td style="padding: 10px 14px; font-weight: 600; color: #FF4F81;">${durationStr}</td>
         </tr>
         <tr style="border-bottom: 1px solid #1F1F2E;">
           <td style="padding: 10px 14px; color: #9A9AA5;">Timezone</td>
-          <td style="padding: 10px 14px; font-weight: 500; color: #FF4F81;">${timezone}</td>
+          <td style="padding: 10px 14px; font-weight: 500; color: #9A9AA5;">${startFormatted.timezone}</td>
         </tr>
         <tr style="border-bottom: 1px solid #1F1F2E;">
           <td style="padding: 10px 14px; color: #9A9AA5;">Device</td>
@@ -238,13 +284,17 @@ export async function sendNewVisitorEmail(env, session) {
           <td style="padding: 10px 14px; color: #9A9AA5;">Country</td>
           <td style="padding: 10px 14px; font-weight: 500;">${countryStr}</td>
         </tr>
-        <tr style="border-bottom: 1px solid #1F1F2E;">
-          <td style="padding: 10px 14px; color: #9A9AA5;">Current Section</td>
-          <td style="padding: 10px 14px; font-weight: 500; color: #FF4F81;">${sectionStr}</td>
+        <tr style="border-bottom: 1px solid #1F1F2E; background-color: rgba(255, 79, 129, 0.08);">
+          <td style="padding: 11px 14px; color: #FF4F81; font-weight: 600;">Sections Viewed</td>
+          <td style="padding: 11px 14px; font-weight: bold; font-size: 16px; color: #FFFFFF;">${uniqueCount} / ${totalSections}</td>
         </tr>
         <tr style="border-bottom: 1px solid #1F1F2E;">
-          <td style="padding: 10px 14px; color: #9A9AA5;">Sections Viewed</td>
-          <td style="padding: 10px 14px; font-weight: 500;">${session.sectionCount || 1}</td>
+          <td style="padding: 10px 14px; color: #9A9AA5;">Last Section</td>
+          <td style="padding: 10px 14px; font-weight: 500; color: #FF4F81;">${lastSectionStr}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #1F1F2E;">
+          <td style="padding: 10px 14px; color: #9A9AA5;">Message Submitted</td>
+          <td style="padding: 10px 14px; font-weight: 600; color: ${summary.messageSubmitted ? '#10B981' : '#9A9AA5'};">${messageSubmittedStr}</td>
         </tr>
         <tr>
           <td style="padding: 10px 14px; color: #9A9AA5;">Session ID</td>
@@ -252,7 +302,28 @@ export async function sendNewVisitorEmail(env, session) {
         </tr>
       </table>
 
-      <p style="color: #9A9AA5; font-size: 11px; margin: 24px 0 0 0; text-align: center;">Her Birthday Interactive Website ✦</p>
+      <!-- Canonical Journey Checklist -->
+      <div style="margin-bottom: 20px;">
+        <h3 style="color: #FF4F81; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px 0;">Canonical Sections Checklist</h3>
+        <table style="width: 100%; border-collapse: collapse; background-color: #12121A; border-radius: 10px; overflow: hidden;">
+          ${checklistRows}
+        </table>
+      </div>
+
+      <!-- Chronological Journey Timeline -->
+      ${summary.chronologicalUniqueSections && summary.chronologicalUniqueSections.length > 0 ? `
+        <div style="margin-bottom: 20px; padding: 14px; background-color: #12121A; border-radius: 10px; border: 1px solid #1F1F2E;">
+          <h4 style="color: #9A9AA5; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px 0;">First Visit Order:</h4>
+          <div style="font-size: 13px; line-height: 1.6;">
+            ${chronologicalList}
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Footer -->
+      <p style="color: #6B7280; font-size: 11px; margin: 24px 0 0 0; text-align: center;">
+        Her Birthday Interactive Website ✦ All tracking is anonymous & privacy-first
+      </p>
     </div>
   `;
 
@@ -266,9 +337,11 @@ export async function sendNewVisitorEmail(env, session) {
       subject,
       htmlBody,
     });
-    console.log(`[Gmail Notification Sent] Delivered to ${receiverEmail} for session: ${sessionIdStr} at ${time} (${timezone})`);
+    console.log(`[Gmail Summary Sent] Delivered to ${receiverEmail} for session: ${sessionIdStr} (Duration: ${durationStr}, Unique Sections: ${uniqueCount}/${totalSections})`);
+    return true;
   } catch (err) {
-    console.error('[Gmail Notification Error]:', err.message || err);
+    console.error('[Gmail Summary Error]:', err.message || err);
+    return false;
   }
 }
 

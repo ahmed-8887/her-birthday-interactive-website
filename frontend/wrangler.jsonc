@@ -17,5 +17,8 @@
       "database_id": "YOUR_D1_DATABASE_ID",
       "migrations_dir": "../migrations"
     }
-  ]
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
 }

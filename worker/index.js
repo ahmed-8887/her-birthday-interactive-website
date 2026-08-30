@@ -3,21 +3,33 @@
  * 
  * Handles:
  * - /api/send-message: User message delivery (Text, Voice Note, Video) via Gmail SMTP
- * - /api/track: Anonymous visitor tracking + D1 persistence + Gmail notification
- * - /api/health: Health check
+ * - /api/track: Anonymous visitor tracking + D1 persistence (silent during visit)
+ * - /api/finalize-sessions: Inactivity finalization trigger (automated via cron + request hooks)
  * - /api/journey/:sessionId: Session journey query
  * - /api/sessions: List recent sessions
+ * - /api/health: Health check
  * - SPA Asset Fallback: env.ASSETS.fetch(request)
+ * - scheduled: Cron trigger for periodic session finalization
  */
 
-import { recordVisitorEvent, getSessionJourney, listRecentSessions } from './db.js';
-import { sendNewVisitorEmail, sendUserMessageEmail } from './notify.js';
+import {
+  recordVisitorEvent,
+  recordMessageSubmission,
+  getInactiveUnnotifiedSessions,
+  claimAndFinalizeSession,
+  getSessionJourneySummary,
+  listRecentSessions,
+} from './db.js';
+import { sendVisitorCompletedEmail, sendUserMessageEmail } from './notify.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
+
+// Inactivity threshold: 3 minutes (180,000 ms) before a session is considered completed
+const INACTIVITY_THRESHOLD_MS = 3 * 60 * 1000;
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -27,6 +39,38 @@ function jsonResponse(data, status = 200) {
       ...CORS_HEADERS,
     },
   });
+}
+
+/**
+ * Sweep and finalize inactive sessions, sending exactly ONE completed journey email per session
+ */
+export async function finalizeInactiveSessions(env) {
+  if (!env.DB) return { processed: 0, finalized: 0 };
+
+  try {
+    const inactiveSessions = await getInactiveUnnotifiedSessions(env.DB, INACTIVITY_THRESHOLD_MS);
+    let finalizedCount = 0;
+
+    for (const session of inactiveSessions) {
+      const endedAt = session.last_activity;
+      const durationMs = Math.max(0, session.last_activity - session.started_at);
+
+      // Atomic claim to guarantee strict idempotency (no duplicate emails)
+      const claimed = await claimAndFinalizeSession(env.DB, session.session_id, endedAt, durationMs);
+      if (claimed) {
+        finalizedCount++;
+        const summary = await getSessionJourneySummary(env.DB, session.session_id);
+        if (summary) {
+          await sendVisitorCompletedEmail(env, summary);
+        }
+      }
+    }
+
+    return { processed: inactiveSessions.length, finalized: finalizedCount };
+  } catch (err) {
+    console.error('[Worker finalizeInactiveSessions Error]:', err);
+    return { processed: 0, finalized: 0, error: err.message };
+  }
 }
 
 export default {
@@ -42,7 +86,7 @@ export default {
     if (url.pathname === '/api/send-message' && request.method === 'POST') {
       try {
         const body = await request.json().catch(() => ({}));
-        const { type = 'text', message = '', mediaData = '', mimeType = '' } = body;
+        const { type = 'text', message = '', mediaData = '', mimeType = '', sessionId = '' } = body;
 
         // Validation
         if (type === 'voice') {
@@ -74,6 +118,11 @@ export default {
           }
         }
 
+        // Flag message submission in session tracking if sessionId provided
+        if (sessionId && env.DB) {
+          ctx.waitUntil(recordMessageSubmission(env.DB, sessionId));
+        }
+
         const emailResult = await sendUserMessageEmail(env, {
           type,
           message,
@@ -96,7 +145,7 @@ export default {
       }
     }
 
-    // 2. POST /api/track - Visitor Journey Tracking Endpoint
+    // 2. POST /api/track - Visitor Journey Tracking Endpoint (Silent & Resilient)
     if (url.pathname === '/api/track' && request.method === 'POST') {
       try {
         const body = await request.json().catch(() => ({}));
@@ -109,45 +158,48 @@ export default {
         // Detect country safely from Cloudflare edge request metadata
         const country = request.cf?.country || request.headers.get('cf-ipcountry') || null;
 
-        const result = await recordVisitorEvent(env.DB, {
+        await recordVisitorEvent(env.DB, {
           sessionId,
-          event: event || 'visit_started',
+          event: event || 'section_viewed',
           section: section || 'Intro',
           deviceType: deviceType || 'desktop',
           country,
           timestamp: timestamp || Date.now(),
         });
 
-        // Trigger Gmail notification ONLY when a new visitor session is initialized
-        if (result.isNewSession && result.session) {
-          ctx.waitUntil(sendNewVisitorEmail(env, result.session));
-        }
+        // Passively sweep and finalize any expired inactive sessions in the background
+        ctx.waitUntil(finalizeInactiveSessions(env));
 
         return jsonResponse({ success: true });
       } catch (err) {
         console.error('[Worker Track Error]:', err);
-        // Always return 200 or clean response so analytics never interrupts the frontend
         return jsonResponse({ success: false, error: 'Failed to record tracking' }, 200);
       }
     }
 
-    // 3. GET /api/journey/:sessionId - Query a visitor's journey
+    // 3. GET/POST /api/finalize-sessions - Inactivity sweeper endpoint (manual or monitoring)
+    if (url.pathname === '/api/finalize-sessions') {
+      const result = await finalizeInactiveSessions(env);
+      return jsonResponse({ success: true, ...result });
+    }
+
+    // 4. GET /api/journey/:sessionId - Query a visitor's journey summary
     if (url.pathname.startsWith('/api/journey/') && request.method === 'GET') {
       const sessionId = url.pathname.replace('/api/journey/', '');
-      const journey = await getSessionJourney(env.DB, sessionId);
+      const journey = await getSessionJourneySummary(env.DB, sessionId);
       if (!journey) {
         return jsonResponse({ success: false, error: 'Session not found' }, 404);
       }
       return jsonResponse({ success: true, journey });
     }
 
-    // 4. GET /api/sessions - List recent sessions
+    // 5. GET /api/sessions - List recent sessions
     if (url.pathname === '/api/sessions' && request.method === 'GET') {
       const sessions = await listRecentSessions(env.DB, 50);
       return jsonResponse({ success: true, sessions });
     }
 
-    // 5. GET /api/health - Worker Health Check
+    // 6. GET /api/health - Worker Health Check
     if (url.pathname === '/api/health') {
       return jsonResponse({
         status: 'ok',
@@ -156,11 +208,16 @@ export default {
       });
     }
 
-    // 6. Fallback to Cloudflare Workers Static Assets (React SPA)
+    // 7. Fallback to Cloudflare Workers Static Assets (React SPA)
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }
 
     return new Response('Not found', { status: 404 });
+  },
+
+  // 8. Cron Scheduled Handler - Fires periodically (every minute) to finalize inactive sessions
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(finalizeInactiveSessions(env));
   },
 };

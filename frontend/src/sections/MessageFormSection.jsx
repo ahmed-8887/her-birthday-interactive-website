@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Heart, Send, Sparkles, AlertCircle, ArrowLeft, Mic, Edit3, Square, RotateCcw, Orbit } from 'lucide-react';
 import { StarField } from '../components/StarField';
 import { textFadeUp } from '../animations/variants';
-import { trackMessageSubmitted } from '../services/tracker';
+import { trackMessageSubmitted, getSessionId } from '../services/tracker';
 
 export const MessageFormSection = () => {
   const navigate = useNavigate();
@@ -123,7 +123,10 @@ export const MessageFormSection = () => {
     setValidationError('');
     setServerError('');
 
-    let payload = { type: activeTab };
+    let payload = {
+      type: activeTab,
+      sessionId: getSessionId(),
+    };
 
     if (activeTab === 'text') {
       const trimmed = message.trim();
