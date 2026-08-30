@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-black: #0B0B0F;
+  --color-red: #E63946;
+  --color-pink: #FF4F81;
+  --color-white: #FFFFFF;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0B0B0F;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 79, 129, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 79, 129, 0.6);
+}
+
+/* Typography & Visual Effects */
+.text-glow-pink {
+  text-shadow: 0 0 20px rgba(255, 79, 129, 0.6), 0 0 40px rgba(255, 79, 129, 0.2);
+}
+
+.text-glow-white {
+  text-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+}
+
+.border-glow-pink {
+  box-shadow: 0 0 20px rgba(255, 79, 129, 0.3);
+}
+
+/* Gradient subtle overlay without being childish */
+.bg-gradient-radial-glow {
+  background: radial-gradient(circle at 50% 30%, rgba(255, 79, 129, 0.12) 0%, rgba(230, 57, 70, 0.05) 40%, rgba(11, 11, 15, 0) 70%);
+}

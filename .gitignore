@@ -1,0 +1,32 @@
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Build output
+dist/
+dist-ssr/
+build/
+*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Messages storage (local archives)
+backend/messages/
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
