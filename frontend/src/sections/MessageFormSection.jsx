@@ -253,13 +253,12 @@ export const MessageFormSection = () => {
                   <div className="flex flex-col gap-2">
                     <label htmlFor="visitor-message" className="font-sans text-xs font-medium tracking-widest text-[#FF4F81] uppercase flex items-center justify-between">
                       <span>Your Message</span>
-                      <span className="text-[10px] text-[#FF4F81] font-normal">*required</span>
+                      <span className="text-[10px] text-[#9A9AA5] font-normal">(optional)</span>
                     </label>
                     <textarea
                       id="visitor-message"
                       rows={6}
                       maxLength={3000}
-                      required
                       value={message}
                       onChange={(e) => {
                         setMessage(e.target.value);
@@ -283,7 +282,7 @@ export const MessageFormSection = () => {
                   <div className="flex flex-col items-center justify-center py-6 px-4 rounded-xl bg-[#0B0B0F]/80 border border-white/10 gap-5 text-center">
                     <div className="font-sans text-xs font-medium tracking-widest text-[#FF4F81] uppercase flex items-center justify-between w-full">
                       <span>Voice Message Recorder</span>
-                      <span className="text-[10px] text-[#FF4F81] font-normal">*required</span>
+                      <span className="text-[10px] text-[#9A9AA5] font-normal">(optional)</span>
                     </div>
 
                     {/* Timer Display */}
@@ -381,20 +380,23 @@ export const MessageFormSection = () => {
                 </motion.button>
               </form>
 
-              {/* Next Page Control (Blurred & Unclickable until message is sent) */}
-              <div className="mt-8 flex flex-col items-center gap-2 select-none">
-                <button
+              {/* Next Page Control (Visible and active) */}
+              <div className="mt-8 flex flex-col items-center gap-2">
+                <motion.button
                   type="button"
-                  disabled
-                  aria-label="Next page is locked until message is sent"
-                  className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full border border-white/10 bg-[#0B0B0F]/40 text-[#9A9AA5]/40 font-sans text-xs sm:text-sm font-medium tracking-[0.2em] uppercase filter blur-[2px] opacity-35 cursor-not-allowed pointer-events-none transition-all duration-300"
+                  onClick={handleGoToUniverse}
+                  whileHover={{
+                    scale: 1.05,
+                    borderColor: 'rgba(255, 79, 129, 0.8)',
+                    boxShadow: '0 0 25px rgba(255, 79, 129, 0.45)',
+                  }}
+                  whileTap={{ scale: 0.97 }}
+                  aria-label="Next: Our Universe"
+                  className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full border border-[#FF4F81]/50 bg-[#E63946] text-white font-sans text-xs sm:text-sm font-medium tracking-[0.2em] uppercase transition-all duration-300 shadow-glow-red cursor-pointer min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F81]"
                 >
-                  <span>NEXT</span>
-                  <ArrowRight className="w-4 h-4 text-[#FF4F81]/40" />
-                </button>
-                <span className="font-sans text-[11px] text-[#9A9AA5]/60 tracking-wider">
-                  🔒 Send your message to unlock the next step
-                </span>
+                  <span>NEXT ✦ OUR UNIVERSE</span>
+                  <ArrowRight className="w-4 h-4 text-white" />
+                </motion.button>
               </div>
             </motion.div>
           ) : (
