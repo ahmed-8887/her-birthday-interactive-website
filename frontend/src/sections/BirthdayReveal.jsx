@@ -83,7 +83,7 @@ export const BirthdayReveal = () => {
   }, [stage, handleBlow, handleNavigateMessage]);
 
   return (
-    <section className="relative min-h-screen w-full flex flex-col items-center justify-center px-6 z-10 select-none overflow-hidden bg-[#0B0B0F]">
+    <section className="relative min-h-screen w-full flex flex-col items-center justify-center px-6 z-10 overflow-hidden bg-[#0B0B0F]">
       {/* Ambient Star Backdrop */}
       <StarField isAccelerated={stage === 'celebration' || stage === 'complete'} />
 

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, RotateCcw } from 'lucide-react';
+import { Heart, RotateCcw, X, Sparkles } from 'lucide-react';
 import { StarField } from '../components/StarField';
 import { UniverseStar } from '../components/UniverseStar';
 import { ConstellationLines } from '../components/ConstellationLines';
 import { UniverseMessage } from '../components/UniverseMessage';
 import { birthdayData } from '../data/birthdayData';
 import { textFadeUp } from '../animations/variants';
+import { trackShowEnded } from '../services/tracker';
 
 export const UniverseSection = () => {
   const [openingStage, setOpeningStage] = useState('dark'); // 'dark' | 'part1' | 'part2' | 'welcome' | 'main'
@@ -15,13 +16,14 @@ export const UniverseSection = () => {
   const [selectedStar, setSelectedStar] = useState(null);
   const [isCompleted, setIsCompleted] = useState(false);
   const [showFinalMessage, setShowFinalMessage] = useState(false);
-  const [closedAttempted, setClosedAttempted] = useState(false);
+  const [isClosed, setIsClosed] = useState(false);
 
-  const handleEndExperience = () => {
+  const handleCloseShow = () => {
+    setIsClosed(true);
+    trackShowEnded();
     try {
       window.close();
     } catch {}
-    setClosedAttempted(true);
   };
 
   const {
@@ -37,9 +39,12 @@ export const UniverseSection = () => {
     stars,
   } = birthdayData.universe;
 
+  const isAllDiscovered = discoveredIds.length === stars.length;
+
   // Opening sequence timeline (triggers on initial mount & whenever replayKey changes)
   useEffect(() => {
     setOpeningStage('dark');
+    setIsClosed(false);
     const t1 = setTimeout(() => setOpeningStage('part1'), 800);
     const t2 = setTimeout(() => setOpeningStage('part2'), 2800);
     const t3 = setTimeout(() => setOpeningStage('welcome'), 4800);
@@ -85,20 +90,43 @@ export const UniverseSection = () => {
     setSelectedStar(null);
     setIsCompleted(false);
     setShowFinalMessage(false);
+    setIsClosed(false);
     setReplayKey((prev) => prev + 1);
   }, []);
 
   return (
-    <section className="relative min-h-screen w-full flex flex-col items-center justify-between py-10 px-6 z-10 select-none overflow-hidden bg-[#0B0B0F]">
+    <section className="relative min-h-screen w-full flex flex-col items-center justify-between py-10 px-6 z-10 overflow-hidden bg-[#0B0B0F]">
       {/* Background Star Canvas */}
-      <StarField isAccelerated={showFinalMessage} />
+      <StarField isAccelerated={showFinalMessage || isClosed} />
 
-      {/* Top Subtle Replay Control */}
-      {openingStage === 'main' && (
-        <div className="absolute top-6 right-6 z-30 flex items-center gap-4">
+      {/* Top Header Controls (Replay + Hidden Close Button when all discovered) */}
+      {openingStage === 'main' && !isClosed && (
+        <div className="absolute top-6 right-6 z-30 flex items-center gap-3">
           <span className="font-sans text-[11px] uppercase tracking-widest text-[#9A9AA5]">
             {discoveredIds.length} / {stars.length} DISCOVERED
           </span>
+
+          {/* Hidden Close Button Revealed When All Points Are Clicked */}
+          <AnimatePresence>
+            {isAllDiscovered && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleCloseShow}
+                aria-label="Close Show"
+                title="Close the show"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#E63946] hover:bg-[#FF4F81] text-white font-sans text-xs font-medium tracking-wider uppercase transition-all duration-200 shadow-glow-red cursor-pointer min-h-[36px]"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>CLOSE</span>
+              </motion.button>
+            )}
+          </AnimatePresence>
+
+          {/* Replay Control */}
           <button
             onClick={handleReplay}
             onKeyDown={(e) => {
@@ -109,193 +137,255 @@ export const UniverseSection = () => {
             }}
             aria-label="Replay the universe experience"
             title="Replay the universe experience"
-            className="p-2.5 rounded-full bg-white/5 border border-white/10 text-[#9A9AA5] hover:text-white hover:border-white/30 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F81] cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="p-2.5 rounded-full bg-white/5 border border-white/10 text-[#9A9AA5] hover:text-white hover:border-white/30 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F81] cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* Opening Intro Text Timeline */}
-      {openingStage !== 'main' && (
-        <div className="my-auto flex flex-col items-center text-center max-w-lg mx-auto z-20">
-          <AnimatePresence mode="wait">
-            {(openingStage === 'part1' || openingStage === 'part2') && (
-              <motion.div
-                key={`part1-2-${replayKey}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.8 }}
-                className="flex flex-col items-center gap-3"
-              >
-                <h1 className="font-serif text-3xl sm:text-5xl text-[#9A9AA5] font-light italic">
-                  {openingTitle1}
-                </h1>
-                {openingStage === 'part2' && (
-                  <motion.h2
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
+      {/* 1. CLOSED SHOW FINAL SCREEN */}
+      {isClosed ? (
+        <motion.div
+          initial={{ opacity: 0, filter: 'blur(8px)' }}
+          animate={{ opacity: 1, filter: 'blur(0px)' }}
+          transition={{ duration: 0.8 }}
+          className="my-auto flex flex-col items-center text-center max-w-lg mx-auto z-20 px-6"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: [0, 1.25, 1] }}
+            transition={{ duration: 0.8 }}
+            className="p-5 rounded-full bg-white/5 border border-[#FF4F81]/40 shadow-glow-pink mb-6"
+          >
+            <Heart className="w-10 h-10 text-[#FF4F81] fill-[#FF4F81] animate-pulse" />
+          </motion.div>
+
+          <h1 className="font-serif text-4xl sm:text-6xl text-white font-normal italic tracking-wide mb-3 text-glow-pink">
+            The Show Has Ended
+          </h1>
+
+          <p className="font-serif italic text-xl sm:text-2xl text-white/90 font-light leading-relaxed mb-4">
+            "Thank you for being part of this little universe." ❤️
+          </p>
+
+          <p className="font-sans text-xs sm:text-sm text-[#9A9AA5] font-light tracking-wider uppercase mb-8">
+            You can safely close this tab now.
+          </p>
+
+          <motion.button
+            onClick={handleReplay}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.97 }}
+            className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full border border-white/20 bg-white/5 hover:bg-white/10 text-white font-sans text-xs font-medium tracking-[0.2em] uppercase transition-all duration-300 cursor-pointer"
+          >
+            <RotateCcw className="w-4 h-4 text-[#FF4F81]" />
+            <span>REPLAY EXPERIENCE ✦</span>
+          </motion.button>
+        </motion.div>
+      ) : (
+        <>
+          {/* Opening Intro Text Timeline */}
+          {openingStage !== 'main' && (
+            <div className="my-auto flex flex-col items-center text-center max-w-lg mx-auto z-20">
+              <AnimatePresence mode="wait">
+                {(openingStage === 'part1' || openingStage === 'part2') && (
+                  <motion.div
+                    key={`part1-2-${replayKey}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
                     transition={{ duration: 0.8 }}
-                    className="font-serif text-4xl sm:text-6xl text-white font-normal italic text-glow-white"
+                    className="flex flex-col items-center gap-3"
                   >
-                    {openingTitle2}
-                  </motion.h2>
+                    <h1 className="font-serif text-3xl sm:text-5xl text-[#9A9AA5] font-light italic">
+                      {openingTitle1}
+                    </h1>
+                    {openingStage === 'part2' && (
+                      <motion.h2
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.8 }}
+                        className="font-serif text-4xl sm:text-6xl text-white font-normal italic text-glow-white"
+                      >
+                        {openingTitle2}
+                      </motion.h2>
+                    )}
+                  </motion.div>
                 )}
-              </motion.div>
-            )}
 
-            {openingStage === 'welcome' && (
-              <motion.div
-                key={`welcome-${replayKey}`}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 1.05 }}
-                transition={{ duration: 1 }}
-              >
-                <h1 className="font-serif text-4xl sm:text-6xl text-white font-normal italic tracking-tight text-glow-pink">
-                  {welcomeText}
-                </h1>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
-
-      {/* Main Interactive Constellation Canvas */}
-      {openingStage === 'main' && !showFinalMessage && (
-        <div className="relative w-full max-w-4xl h-[75vh] my-auto flex items-center justify-center z-20">
-          {/* Central Glowing Heart */}
-          <motion.div
-            className="relative flex flex-col items-center justify-center z-10"
-            animate={{ scale: [1, 1.08, 1] }}
-            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <div className="absolute w-36 h-36 rounded-full bg-gradient-radial-glow blur-2xl pointer-events-none opacity-80" />
-            <div className="p-4 rounded-full bg-white/5 border border-[#FF4F81]/40 shadow-glow-pink">
-              <Heart className="w-8 h-8 text-[#FF4F81] fill-[#FF4F81] animate-pulse" />
+                {openingStage === 'welcome' && (
+                  <motion.div
+                    key={`welcome-${replayKey}`}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.05 }}
+                    transition={{ duration: 1 }}
+                  >
+                    <h1 className="font-serif text-4xl sm:text-6xl text-white font-normal italic tracking-tight text-glow-pink">
+                      {welcomeText}
+                    </h1>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </motion.div>
+          )}
 
-          {/* SVG Connection Lines */}
-          <ConstellationLines
-            stars={stars}
-            discoveredIds={discoveredIds}
-            selectedId={selectedStar?.id}
-          />
-
-          {/* Interactive Constellation Stars */}
-          {stars.map((star) => (
-            <UniverseStar
-              key={star.id}
-              star={star}
-              isDiscovered={discoveredIds.includes(star.id)}
-              isSelected={selectedStar?.id === star.id}
-              onClick={handleStarClick}
-            />
-          ))}
-
-          {/* Floating Message Card */}
-          <UniverseMessage star={selectedStar} onClose={handleCloseMessage} />
-        </div>
-      )}
-
-      {/* Final Completion Climax Reveal */}
-      {showFinalMessage && (
-        <div className="my-auto flex flex-col items-center text-center max-w-lg mx-auto z-20">
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={textFadeUp}
-            className="flex flex-col items-center gap-4"
-          >
-            <p className="font-serif italic text-xl sm:text-3xl text-[#9A9AA5] font-light">
-              "{allDiscoveredText1}"
-            </p>
-
-            <p className="font-sans text-xs sm:text-sm text-[#9A9AA5] font-light tracking-wider uppercase">
-              {allDiscoveredText2}
-            </p>
-
-            {/* Glowing Central Heart */}
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: [0, 1.25, 1] }}
-              transition={{ duration: 1, delay: 0.8 }}
-              className="p-4 rounded-full bg-white/10 border border-[#FF4F81]/60 shadow-glow-pink my-3"
-            >
-              <Heart className="w-10 h-10 text-[#FF4F81] fill-[#FF4F81] animate-pulse" />
-            </motion.div>
-
-            {/* Her Name */}
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1, delay: 1.5 }}
-              className="font-serif text-5xl sm:text-7xl text-white font-normal text-glow-white tracking-tight"
-            >
-              {finalName}
-            </motion.h1>
-
-            {/* You Are Loved */}
-            <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1, delay: 2.2 }}
-              className="font-serif text-3xl sm:text-5xl italic font-light text-[#FF4F81] text-glow-pink"
-            >
-              {finalSubtitle}
-            </motion.h2>
-
-            {/* Final Personal Message */}
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 1, delay: 3 }}
-              className="font-sans text-sm sm:text-base text-white/90 font-light max-w-md leading-relaxed mt-2"
-            >
-              "{finalMessage}"
-            </motion.p>
-
-            {/* Final Signature */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 1, delay: 3.8 }}
-              className="mt-8 pt-6 border-t border-white/10 w-full flex flex-col items-center gap-1"
-            >
-              <span className="font-serif italic text-base text-[#9A9AA5]">
-                {signature}
-              </span>
-            </motion.div>
-
-            {/* Close / End Experience Action Button & Graceful Fallback */}
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1, delay: 4.2 }}
-              className="mt-4 flex flex-col items-center gap-3 w-full"
-            >
-              <button
-                type="button"
-                onClick={handleEndExperience}
-                className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-white/10 hover:bg-[#FF4F81] border border-white/20 hover:border-[#FF4F81] text-white font-sans text-xs sm:text-sm font-medium tracking-[0.2em] uppercase transition-all duration-300 shadow-glow-pink cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F81]"
+          {/* Main Interactive Constellation Canvas */}
+          {openingStage === 'main' && !showFinalMessage && (
+            <div className="relative w-full max-w-4xl h-[75vh] my-auto flex items-center justify-center z-20">
+              {/* Central Glowing Heart */}
+              <motion.div
+                className="relative flex flex-col items-center justify-center z-10"
+                animate={{ scale: [1, 1.08, 1] }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
               >
-                <span>End Experience ✦ Close</span>
-              </button>
+                <div className="absolute w-36 h-36 rounded-full bg-gradient-radial-glow blur-2xl pointer-events-none opacity-80" />
+                <div className="p-4 rounded-full bg-white/5 border border-[#FF4F81]/40 shadow-glow-pink">
+                  <Heart className="w-8 h-8 text-[#FF4F81] fill-[#FF4F81] animate-pulse" />
+                </div>
+              </motion.div>
 
-              {closedAttempted && (
-                <motion.p
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="font-sans text-xs sm:text-sm text-[#FF4F81] font-light tracking-wide mt-1 text-center"
+              {/* SVG Connection Lines */}
+              <ConstellationLines
+                stars={stars}
+                discoveredIds={discoveredIds}
+                selectedId={selectedStar?.id}
+              />
+
+              {/* Interactive Constellation Stars */}
+              {stars.map((star) => (
+                <UniverseStar
+                  key={star.id}
+                  star={star}
+                  isDiscovered={discoveredIds.includes(star.id)}
+                  isSelected={selectedStar?.id === star.id}
+                  onClick={handleStarClick}
+                />
+              ))}
+
+              {/* Floating Message Card */}
+              <UniverseMessage star={selectedStar} onClose={handleCloseMessage} />
+
+              {/* Bottom Hidden Close Button Revealed When All Points Are Clicked */}
+              <AnimatePresence>
+                {isAllDiscovered && !selectedStar && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.6 }}
+                    className="absolute bottom-2 z-30"
+                  >
+                    <motion.button
+                      type="button"
+                      onClick={handleCloseShow}
+                      whileHover={{
+                        scale: 1.06,
+                        boxShadow: '0 0 30px rgba(255, 79, 129, 0.6)',
+                      }}
+                      whileTap={{ scale: 0.96 }}
+                      aria-label="Close Show"
+                      className="inline-flex items-center gap-2 px-8 py-3 rounded-full bg-[#E63946] hover:bg-[#FF4F81] border border-[#FF4F81]/60 text-white font-sans text-xs sm:text-sm font-medium tracking-[0.2em] uppercase transition-all duration-300 shadow-glow-red cursor-pointer min-h-[46px]"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>CLOSE SHOW ✦</span>
+                    </motion.button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {/* Final Completion Climax Reveal */}
+          {showFinalMessage && (
+            <div className="my-auto flex flex-col items-center text-center max-w-lg mx-auto z-20">
+              <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={textFadeUp}
+                className="flex flex-col items-center gap-4"
+              >
+                <p className="font-serif italic text-xl sm:text-3xl text-[#9A9AA5] font-light">
+                  "{allDiscoveredText1}"
+                </p>
+
+                <p className="font-sans text-xs sm:text-sm text-[#9A9AA5] font-light tracking-wider uppercase">
+                  {allDiscoveredText2}
+                </p>
+
+                {/* Glowing Central Heart */}
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: [0, 1.25, 1] }}
+                  transition={{ duration: 1, delay: 0.8 }}
+                  className="p-4 rounded-full bg-white/10 border border-[#FF4F81]/60 shadow-glow-pink my-3"
                 >
-                  The experience has ended. You can close this tab now. ❤️
+                  <Heart className="w-10 h-10 text-[#FF4F81] fill-[#FF4F81] animate-pulse" />
+                </motion.div>
+
+                {/* Her Name */}
+                <motion.h1
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 1, delay: 1.5 }}
+                  className="font-serif text-5xl sm:text-7xl text-white font-normal text-glow-white tracking-tight"
+                >
+                  {finalName}
+                </motion.h1>
+
+                {/* You Are Loved */}
+                <motion.h2
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 1, delay: 2.2 }}
+                  className="font-serif text-3xl sm:text-5xl italic font-light text-[#FF4F81] text-glow-pink"
+                >
+                  {finalSubtitle}
+                </motion.h2>
+
+                {/* Final Personal Message */}
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 1, delay: 3 }}
+                  className="font-sans text-sm sm:text-base text-white/90 font-light max-w-md leading-relaxed mt-2"
+                >
+                  "{finalMessage}"
                 </motion.p>
-              )}
-            </motion.div>
-          </motion.div>
-        </div>
+
+                {/* Final Signature */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 1, delay: 3.8 }}
+                  className="mt-8 pt-6 border-t border-white/10 w-full flex flex-col items-center gap-1"
+                >
+                  <span className="font-serif italic text-base text-[#9A9AA5]">
+                    {signature}
+                  </span>
+                </motion.div>
+
+                {/* Close Show Action Button */}
+                <motion.div
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 1, delay: 4.2 }}
+                  className="mt-4 flex flex-col items-center gap-3 w-full"
+                >
+                  <button
+                    type="button"
+                    onClick={handleCloseShow}
+                    className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-[#E63946] hover:bg-[#FF4F81] border border-[#FF4F81]/60 text-white font-sans text-xs sm:text-sm font-medium tracking-[0.2em] uppercase transition-all duration-300 shadow-glow-red cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F81]"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>CLOSE SHOW ✦</span>
+                  </button>
+                </motion.div>
+              </motion.div>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

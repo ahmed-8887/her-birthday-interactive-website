@@ -1,22 +1,14 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Camera } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { StarField } from '../components/StarField';
-import { MemoryCard } from '../components/MemoryCard';
-import { MemoryLightbox } from '../components/MemoryLightbox';
 import { birthdayData } from '../data/birthdayData';
 import { fadeIn, textFadeUp } from '../animations/variants';
 
 export const MemoriesSection = () => {
   const navigate = useNavigate();
-  const [selectedMemory, setSelectedMemory] = useState(null);
-  const { memoriesTitle, memoriesSubtitle, memoriesEndText } = birthdayData.messages;
-  const memories = birthdayData.memories;
-
-  const handleCardClick = (memory) => {
-    setSelectedMemory(memory);
-  };
+  const { memoriesTitle, memoriesSubtitle, memoriesParagraphs = [], memoriesEndText } = birthdayData.messages;
 
   const handleContinue = (e) => {
     e.preventDefault();
@@ -24,7 +16,7 @@ export const MemoriesSection = () => {
   };
 
   return (
-    <section className="relative min-h-screen w-full flex flex-col justify-between py-12 px-4 sm:px-8 z-10 select-none overflow-x-hidden bg-[#0B0B0F]">
+    <section className="relative min-h-screen w-full flex flex-col justify-between py-12 px-4 sm:px-8 z-10 overflow-x-hidden bg-[#0B0B0F]">
       {/* Ambient Backdrop */}
       <StarField />
 
@@ -43,47 +35,30 @@ export const MemoriesSection = () => {
         </p>
       </motion.div>
 
-      {/* Desktop Scattered Scrapbook Composition (lg viewports) */}
-      <div className="relative hidden lg:block w-full max-w-6xl h-[620px] mx-auto my-6 z-20">
-        {memories.map((mem) => (
-          <div
-            key={mem.id}
-            className="absolute"
-            style={{
-              top: mem.desktopPos.top,
-              left: mem.desktopPos.left,
-              width: mem.desktopPos.width,
-              zIndex: mem.desktopPos.zIndex,
-            }}
-          >
-            <MemoryCard memory={mem} onClick={handleCardClick} />
-          </div>
-        ))}
-      </div>
+      {/* Central Birthday Message Container */}
+      <motion.div
+        initial={{ opacity: 0, y: 25 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, delay: 0.2 }}
+        className="relative z-20 w-full max-w-3xl mx-auto my-6 p-6 sm:p-10 rounded-2xl bg-[#12121A]/80 border border-[#FF4F81]/30 backdrop-blur-md shadow-[0_0_40px_rgba(255,79,129,0.15)] text-center flex flex-col items-center gap-5"
+      >
+        {/* Subtle Decorative Star Icon */}
+        <div className="inline-flex items-center justify-center p-3 rounded-full bg-[#FF4F81]/10 border border-[#FF4F81]/25 mb-1 text-[#FF4F81] shadow-glow-pink">
+          <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />
+        </div>
 
-      {/* Mobile & Tablet Vertical Memory Journey (sm/md viewports) */}
-      <div className="relative block lg:hidden w-full max-w-md mx-auto my-8 space-y-8 z-20">
-        {memories.map((mem, idx) => (
-          <motion.div
-            key={mem.id}
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-50px' }}
-            transition={{ duration: 0.7, delay: idx * 0.15 }}
-            className={`w-[85%] sm:w-[80%] ${
-              idx % 2 === 0 ? 'mr-auto text-left' : 'ml-auto text-right'
-            }`}
-          >
-            <MemoryCard memory={mem} onClick={handleCardClick} />
-          </motion.div>
-        ))}
-      </div>
+        {/* Romantic Birthday Message Paragraphs */}
+        <div className="flex flex-col gap-4 text-white font-serif italic text-base sm:text-lg md:text-xl font-normal leading-relaxed text-glow-white text-center">
+          {memoriesParagraphs.map((para, index) => (
+            <p key={index} className="leading-relaxed">
+              "{para}"
+            </p>
+          ))}
+        </div>
 
-      {/* Custom Lightbox Modal */}
-      <MemoryLightbox
-        memory={selectedMemory}
-        onClose={() => setSelectedMemory(null)}
-      />
+        {/* Decorative Divider */}
+        <div className="w-20 h-[1px] bg-gradient-to-r from-transparent via-[#FF4F81]/60 to-transparent mt-2" />
+      </motion.div>
 
       {/* Footer Navigation Area */}
       <motion.div

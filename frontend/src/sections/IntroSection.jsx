@@ -36,7 +36,7 @@ export const IntroSection = () => {
   };
 
   return (
-    <section className="relative min-h-screen w-full flex flex-col items-center justify-center text-center px-6 z-10 select-none overflow-hidden bg-[#0B0B0F]">
+    <section className="relative min-h-screen w-full flex flex-col items-center justify-center text-center px-6 z-10 overflow-hidden bg-[#0B0B0F]">
       <div className="relative max-w-xl mx-auto flex flex-col items-center justify-center">
         
         {/* Central Glowing Heart Component */}

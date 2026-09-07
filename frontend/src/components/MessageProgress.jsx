@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 
 export const MessageProgress = ({ currentIndex, total }) => {
   return (
-    <div className="flex items-center gap-3 select-none">
+    <div className="flex items-center gap-3">
       {/* Step Numbers */}
       <span className="font-mono text-xs text-[#FF4F81] tracking-widest">
         0{currentIndex + 1}

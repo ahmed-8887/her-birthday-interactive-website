@@ -108,6 +108,182 @@ const formatPakistanDateTime = (timestamp) => {
   }
 };
 
+// Canonical sections of the Birthday Experience
+const CANONICAL_SECTIONS = [
+  { key: 'Intro', name: '1. Welcome (Intro)' },
+  { key: 'Star Journey', name: '2. Interactive Star Journey' },
+  { key: 'Gift', name: '3. Secret Gift Box' },
+  { key: 'Memories', name: '4. Heartfelt Message (Memories)' },
+  { key: 'Messages', name: '5. Personal Messages Sequence' },
+  { key: 'Birthday Reveal', name: '6. Birthday Candle Reveal' },
+  { key: 'Message Form', name: '7. Message & Voice Note Form' },
+  { key: 'Universe', name: '8. Our Little Universe' },
+];
+
+// Helper: Format duration in readable string (e.g., "3 minutes 42 seconds")
+const formatDurationString = (seconds) => {
+  if (seconds < 60) {
+    return `${seconds} second${seconds === 1 ? '' : 's'}`;
+  }
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (secs === 0) {
+    return `${mins} minute${mins === 1 ? '' : 's'}`;
+  }
+  return `${mins} minute${mins === 1 ? '' : 's'} ${secs} second${secs === 1 ? '' : 's'}`;
+};
+
+// Helper: Send Gmail notification when visitor completes/ends the show
+const sendVisitorCompletedNotification = async (session) => {
+  if (!session || session.completedEmailSent) return;
+  session.completedEmailSent = true;
+
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
+  const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+  const recipientEmail = process.env.MESSAGE_RECEIVER_EMAIL || smtpUser;
+
+  const durationSeconds = Math.max(0, Math.round(((session.lastActivity || Date.now()) - session.startedAt) / 1000));
+  const durationStr = formatDurationString(durationSeconds);
+  const startFormatted = formatPakistanDateTime(session.startedAt);
+  const endFormatted = formatPakistanDateTime(session.lastActivity || Date.now());
+
+  const deviceStr = (session.deviceType || 'Desktop').charAt(0).toUpperCase() + (session.deviceType || 'Desktop').slice(1);
+  const countryStr = session.country || 'Local / Unknown';
+  const sessionIdStr = session.sessionId;
+
+  // Gather unique visited sections
+  const eventsForSession = localEvents.filter((e) => e.sessionId === session.sessionId);
+  const visitedSet = new Set(eventsForSession.map((e) => e.sectionName));
+
+  const checklist = CANONICAL_SECTIONS.map((sec) => {
+    const visited = visitedSet.has(sec.key) || visitedSet.has(sec.name) || Array.from(visitedSet).some((v) => v.toLowerCase().includes(sec.key.toLowerCase()));
+    return { name: sec.name, visited };
+  });
+
+  const openedPortionsCount = checklist.filter((c) => c.visited).length;
+  const totalPortions = CANONICAL_SECTIONS.length;
+
+  if (!smtpUser || !smtpPass) {
+    console.log(`[Local Notification Notice] Visitor ended show: ${sessionIdStr}, Duration: ${durationStr}, Portions: ${openedPortionsCount}/${totalPortions}. (Add SMTP credentials to send real Gmail)`);
+    return;
+  }
+
+  const checklistHtml = checklist.map((item) => {
+    const isVisited = item.visited;
+    const icon = isVisited ? '✓' : '✗';
+    const iconColor = isVisited ? '#10B981' : '#EF4444';
+    const textColor = isVisited ? '#FFFFFF' : '#9A9AA5';
+    const bgBadge = isVisited ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.1)';
+
+    return `
+      <tr style="border-bottom: 1px solid #1F1F2E;">
+        <td style="padding: 10px 14px; width: 32px; text-align: center;">
+          <span style="display: inline-block; width: 22px; height: 22px; line-height: 22px; border-radius: 50%; background-color: ${bgBadge}; color: ${iconColor}; font-weight: bold; font-size: 13px;">${icon}</span>
+        </td>
+        <td style="padding: 10px 14px; color: ${textColor}; font-size: 14px; font-weight: ${isVisited ? '600' : '400'};">
+          ${item.name}
+        </td>
+        <td style="padding: 10px 14px; text-align: right; font-size: 12px; color: ${isVisited ? '#10B981' : '#EF4444'};">
+          ${isVisited ? 'Opened' : 'Not Opened'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const htmlBody = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #FF4F81; border-radius: 16px; background-color: #0B0B0F; color: #FFFFFF;">
+      
+      <!-- Header -->
+      <div style="text-align: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #1F1F2E;">
+        <h2 style="color: #FF4F81; margin: 0 0 6px 0; font-size: 24px;">🎂 Visitor Journey Summary</h2>
+        <p style="color: #9A9AA5; font-size: 13px; margin: 0;">Her Birthday Interactive Website — Show Ended</p>
+      </div>
+
+      <!-- Quick Metrics Highlight -->
+      <table style="width: 100%; border-collapse: separate; border-spacing: 12px; margin-bottom: 10px;">
+        <tr>
+          <td style="padding: 14px; background-color: #161622; border-radius: 10px; text-align: center; border: 1px solid rgba(255, 79, 129, 0.3); width: 50%;">
+            <div style="color: #9A9AA5; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Total Time Spent</div>
+            <div style="color: #FF4F81; font-size: 18px; font-weight: bold; margin-top: 4px;">${durationStr}</div>
+          </td>
+          <td style="padding: 14px; background-color: #161622; border-radius: 10px; text-align: center; border: 1px solid rgba(255, 79, 129, 0.3); width: 50%;">
+            <div style="color: #9A9AA5; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Portions Opened</div>
+            <div style="color: #10B981; font-size: 18px; font-weight: bold; margin-top: 4px;">${openedPortionsCount} / ${totalPortions}</div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Details Table -->
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #FFFFFF; background-color: #12121A; border-radius: 10px; overflow: hidden; margin-bottom: 20px;">
+        <tr style="border-bottom: 1px solid #1F1F2E;">
+          <td style="padding: 10px 14px; color: #9A9AA5; width: 140px;">Time Started</td>
+          <td style="padding: 10px 14px; font-weight: 500;">${startFormatted.time} (${startFormatted.date})</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #1F1F2E;">
+          <td style="padding: 10px 14px; color: #9A9AA5;">Time Ended</td>
+          <td style="padding: 10px 14px; font-weight: 500;">${endFormatted.time} (${endFormatted.date})</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #1F1F2E;">
+          <td style="padding: 10px 14px; color: #9A9AA5;">Duration</td>
+          <td style="padding: 10px 14px; font-weight: 600; color: #FF4F81;">${durationStr}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #1F1F2E;">
+          <td style="padding: 10px 14px; color: #9A9AA5;">Portions Opened</td>
+          <td style="padding: 10px 14px; font-weight: bold; color: #10B981;">${openedPortionsCount} of ${totalPortions} sections</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #1F1F2E;">
+          <td style="padding: 10px 14px; color: #9A9AA5;">Device</td>
+          <td style="padding: 10px 14px;">${deviceStr}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #1F1F2E;">
+          <td style="padding: 10px 14px; color: #9A9AA5;">Last Section</td>
+          <td style="padding: 10px 14px; color: #FF4F81;">${session.lastSection || 'Universe'}</td>
+        </tr>
+        <tr>
+          <td style="padding: 10px 14px; color: #9A9AA5;">Session ID</td>
+          <td style="padding: 10px 14px; font-family: monospace; font-size: 11px; color: #9A9AA5;">${sessionIdStr}</td>
+        </tr>
+      </table>
+
+      <!-- Portions Opened Checklist -->
+      <div style="margin-bottom: 20px;">
+        <h3 style="color: #FF4F81; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px 0;">Portions Opened Checklist</h3>
+        <table style="width: 100%; border-collapse: collapse; background-color: #12121A; border-radius: 10px; overflow: hidden;">
+          ${checklistHtml}
+        </table>
+      </div>
+
+      <p style="color: #6B7280; font-size: 12px; text-align: center; margin-top: 24px;">
+        Her Birthday Interactive Website ✦ Automatic Summary Notification
+      </p>
+    </div>
+  `;
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass.replace(/\s+/g, ''),
+      },
+    });
+
+    await transporter.sendMail({
+      from: `"Birthday Website" <${smtpUser}>`,
+      to: recipientEmail,
+      subject: `🎂 Visitor Journey Summary — ${openedPortionsCount}/${totalPortions} Portions Opened (${durationStr})`,
+      html: htmlBody,
+    });
+    console.log(`[Gmail Summary Sent] Delivered to ${recipientEmail} for session: ${sessionIdStr} (Duration: ${durationStr}, Portions: ${openedPortionsCount}/${totalPortions})`);
+  } catch (err) {
+    console.error('[Gmail Summary Error]:', err.message);
+  }
+};
+
 // Helper: Send Gmail notification for new visitor session
 const sendNewVisitorNotification = async (session) => {
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -190,6 +366,7 @@ router.post('/track', async (req, res) => {
         country: 'Local',
         sectionCount: 1,
         lastSection: safeSection,
+        completedEmailSent: false,
       };
 
       localSessions.set(safeSessionId, sessionData);
@@ -223,6 +400,11 @@ router.post('/track', async (req, res) => {
       });
       session.sectionCount += 1;
       session.lastSection = safeSection;
+    }
+
+    // Check if visitor ended the show / closed universe
+    if (safeEvent === 'show_ended' || safeSection === 'Universe Close' || safeSection === 'Universe End') {
+      sendVisitorCompletedNotification(session).catch(() => {});
     }
 
     return res.json({ success: true, isNewSession: false });

@@ -54,7 +54,7 @@ export const StarJourney = () => {
   };
 
   return (
-    <section className="relative min-h-screen w-full flex flex-col items-center justify-between py-12 px-6 z-10 select-none overflow-hidden bg-[#0B0B0F]">
+    <section className="relative min-h-screen w-full flex flex-col items-center justify-between py-12 px-6 z-10 overflow-hidden bg-[#0B0B0F]">
       {/* Background Star Particle Canvas */}
       <StarField isAccelerated={isHeartComplete} />
 

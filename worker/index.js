@@ -167,8 +167,30 @@ export default {
           timestamp: timestamp || Date.now(),
         });
 
-        // Passively sweep and finalize any expired inactive sessions in the background
-        ctx.waitUntil(finalizeInactiveSessions(env));
+        // If show ended explicitly, finalize immediately
+        if (event === 'show_ended' && env.DB) {
+          ctx.waitUntil((async () => {
+            try {
+              const endedAt = timestamp || Date.now();
+              const summary = await getSessionJourneySummary(env.DB, sessionId);
+              if (summary && !summary.notified_at) {
+                const durationMs = Math.max(0, endedAt - (summary.started_at || endedAt));
+                const claimed = await claimAndFinalizeSession(env.DB, sessionId, endedAt, durationMs);
+                if (claimed) {
+                  const freshSummary = await getSessionJourneySummary(env.DB, sessionId);
+                  if (freshSummary) {
+                    await sendVisitorCompletedEmail(env, freshSummary);
+                  }
+                }
+              }
+            } catch (finalizeErr) {
+              console.error('[Worker Immediate Finalize Error]:', finalizeErr);
+            }
+          })());
+        } else {
+          // Passively sweep and finalize any expired inactive sessions in the background
+          ctx.waitUntil(finalizeInactiveSessions(env));
+        }
 
         return jsonResponse({ success: true });
       } catch (err) {

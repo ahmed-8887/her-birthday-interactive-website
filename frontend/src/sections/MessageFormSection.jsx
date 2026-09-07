@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Heart, Send, Sparkles, AlertCircle, ArrowLeft, Mic, Edit3, Square, RotateCcw, Orbit } from 'lucide-react';
+import { Heart, Send, Sparkles, AlertCircle, ArrowLeft, ArrowRight, Mic, Edit3, Square, RotateCcw, Orbit } from 'lucide-react';
 import { StarField } from '../components/StarField';
 import { textFadeUp } from '../animations/variants';
 import { trackMessageSubmitted, getSessionId } from '../services/tracker';
@@ -187,7 +187,7 @@ export const MessageFormSection = () => {
   };
 
   return (
-    <section className="relative min-h-screen w-full flex flex-col items-center justify-between py-12 px-4 sm:px-6 z-10 select-none overflow-hidden bg-[#0B0B0F]">
+    <section className="relative min-h-screen w-full flex flex-col items-center justify-between py-12 px-4 sm:px-6 z-10 overflow-hidden bg-[#0B0B0F]">
       {/* Background Star Canvas */}
       <StarField isAccelerated={isSubmitted} />
 
@@ -380,6 +380,22 @@ export const MessageFormSection = () => {
                   )}
                 </motion.button>
               </form>
+
+              {/* Next Page Control (Blurred & Unclickable until message is sent) */}
+              <div className="mt-8 flex flex-col items-center gap-2 select-none">
+                <button
+                  type="button"
+                  disabled
+                  aria-label="Next page is locked until message is sent"
+                  className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full border border-white/10 bg-[#0B0B0F]/40 text-[#9A9AA5]/40 font-sans text-xs sm:text-sm font-medium tracking-[0.2em] uppercase filter blur-[2px] opacity-35 cursor-not-allowed pointer-events-none transition-all duration-300"
+                >
+                  <span>NEXT</span>
+                  <ArrowRight className="w-4 h-4 text-[#FF4F81]/40" />
+                </button>
+                <span className="font-sans text-[11px] text-[#9A9AA5]/60 tracking-wider">
+                  🔒 Send your message to unlock the next step
+                </span>
+              </div>
             </motion.div>
           ) : (
             /* 2. Message Sent Success State */
@@ -425,12 +441,17 @@ export const MessageFormSection = () => {
 
                 <motion.button
                   onClick={handleGoToUniverse}
-                  whileHover={{ scale: 1.05 }}
+                  whileHover={{
+                    scale: 1.05,
+                    borderColor: 'rgba(255, 79, 129, 0.8)',
+                    boxShadow: '0 0 25px rgba(255, 79, 129, 0.45)',
+                  }}
                   whileTap={{ scale: 0.97 }}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-full border border-[#FF4F81]/50 bg-[#E63946] text-white font-sans text-xs font-medium tracking-widest uppercase transition-all duration-300 shadow-glow-red cursor-pointer"
+                  aria-label="Next: Our Universe"
+                  className="inline-flex items-center gap-2 px-7 py-3 rounded-full border border-[#FF4F81]/50 bg-[#E63946] text-white font-sans text-xs font-medium tracking-widest uppercase transition-all duration-300 shadow-glow-red cursor-pointer min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F81]"
                 >
-                  <Orbit className="w-4 h-4 text-white" />
-                  <span>Our Universe</span>
+                  <span>NEXT ✦ OUR UNIVERSE</span>
+                  <ArrowRight className="w-4 h-4 text-white" />
                 </motion.button>
               </div>
             </motion.div>

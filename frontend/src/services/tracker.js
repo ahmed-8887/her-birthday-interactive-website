@@ -171,6 +171,13 @@ export const trackMessageSubmitted = (messageType = 'text') => {
   sendTrackEvent('message_submitted', 'Message Form');
 };
 
+/**
+ * Track show ended / closed event
+ */
+export const trackShowEnded = () => {
+  sendTrackEvent('show_ended', 'Universe End');
+};
+
 let heartbeatInterval = null;
 let isListenersInitialized = false;
 

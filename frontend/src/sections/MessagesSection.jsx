@@ -53,7 +53,7 @@ export const MessagesSection = () => {
   return (
     <section
       onClick={isStarted && !isFinished ? handleAdvance : undefined}
-      className="relative min-h-screen w-full flex flex-col items-center justify-between py-12 px-6 z-10 select-none overflow-hidden bg-[#0B0B0F] cursor-pointer"
+      className="relative min-h-screen w-full flex flex-col items-center justify-between py-12 px-6 z-10 overflow-hidden bg-[#0B0B0F] cursor-pointer"
     >
       {/* Ambient Twinkling Backdrop */}
       <StarField isAccelerated={isFinished} />
